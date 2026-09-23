@@ -22,6 +22,18 @@ function retrier(run, isStopped) {
 }
 
 // ---------- TikTok ----------
+// حقل النص في رسائل تيك توك اسمه content (وليس comment)، والإيموجي تجي بمواقع داخل النص
+const CDN = /^https:\/\/[\w.-]*(tiktokcdn|byteimg|ibyteimg|ibytedtos)[\w.-]*\//;
+function ttText(d) {
+  let s = String(d.content ?? d.comment ?? '');
+  const em = (d.emotes || [])
+    .map(e => ({ i: Number(e.index) || 0, url: e.emote?.image?.urlList?.[0] }))
+    .filter(e => e.url && CDN.test(e.url) && !/[\]\s]/.test(e.url))
+    .sort((a, b) => b.i - a.i);
+  for (const e of em) { const i = Math.min(Math.max(e.i, 0), s.length); s = s.slice(0, i) + `[tt:${e.url}]` + s.slice(i); }
+  return s;
+}
+
 function tiktok(name, emit, status) {
   let stopped = false, conn;
   const retry = retrier(() => run(), () => stopped);
@@ -32,8 +44,12 @@ function tiktok(name, emit, status) {
     conn.on(WebcastEvent.CHAT, d => emit({
       platform: 'tiktok',
       user: d.user?.nickname || d.user?.uniqueId || '?',
-      text: d.comment || ''
+      text: ttText(d)
     }));
+    conn.on(WebcastEvent.EMOTE, d => {
+      const t = (d.emoteList || []).map(e => e.image?.urlList?.[0]).filter(u => u && CDN.test(u) && !/[\]\s]/.test(u)).map(u => `[tt:${u}]`).join(' ');
+      if (t) emit({ platform: 'tiktok', user: d.user?.nickname || d.user?.uniqueId || '?', text: t });
+    });
     conn.on(ControlEvent.DISCONNECTED, () => { status('offline'); retry(10000); });
     try { await conn.connect(); status('connected'); }
     catch (e) { status('offline', String(e.message || e).slice(0, 120)); retry(20000); }

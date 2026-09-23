@@ -76,10 +76,10 @@ function add(m) {
   const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = NAMES[m.platform];
   const u = document.createElement('b'); u.textContent = m.user; if (m.color) u.style.color = m.color;
   const t = document.createElement('span'); t.className = 'txt'; t.dir = 'auto';
-  const re = /\[emote:(\d+):([^\]]*)\]/g; let last = 0, x;
+  const re = /\[emote:(\d+):([^\]]*)\]|\[tt:(https:[^\]\s]+)\]/g; let last = 0, x;
   while ((x = re.exec(m.text))) {
     t.append(m.text.slice(last, x.index));
-    const img = new Image(); img.className = 'emote'; img.alt = x[2]; img.src = 'https://files.kick.com/emotes/' + x[1] + '/fullsize';
+    const img = new Image(); img.className = 'emote'; if (x[3]) { img.alt = ''; img.src = x[3]; } else { img.alt = x[2]; img.src = 'https://files.kick.com/emotes/' + x[1] + '/fullsize'; }
     t.append(img); last = re.lastIndex;
   }
   t.append(m.text.slice(last));
@@ -90,9 +90,11 @@ function add(m) {
   if (stick) feed.scrollTop = feed.scrollHeight;
 }
 
+// إذا الصفحة على فايربيس، حط هنا دومين السيرفر بدون https:// (مثال: live-chat-hub.onrender.com)
+const BACKEND = 'chating-ozel.onrender.com';
 let ws, timer;
 function open() {
-  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  ws = new WebSocket((BACKEND ? 'wss://' + BACKEND : (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host) + '/ws');
   ws.onopen = join;
   ws.onmessage = e => { const m = JSON.parse(e.data); if (m.type === 'chat') add(m); else { status[m.platform] = m; paint(); } };
   ws.onclose = () => { clearTimeout(timer); timer = setTimeout(open, 3000); };
