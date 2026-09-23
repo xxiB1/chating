@@ -1,0 +1,16 @@
+{
+  "name": "live-chat-hub",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "tiktok-live-connector": "^2.5.0",
+    "ws": "^8.21.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

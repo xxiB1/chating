@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>شات واحد لتيك توك وكيك</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#16141f;--panel:#211e30;--line:#332f47;--text:#ece9f5;--mute:#9a95b3;--tt:#fe2c55;--kk:#53fc18}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{display:flex;flex-direction:column;background:var(--bg);color:var(--text);font:400 16px/1.6 "IBM Plex Sans Arabic",system-ui,sans-serif}
+#bar{background:var(--panel);border-bottom:1px solid var(--line);padding:12px 16px}
+form{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
+label{display:flex;flex-direction:column;font-size:13px;color:var(--mute);gap:2px}
+input{background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 10px;font:inherit;min-width:150px;direction:ltr;text-align:left}
+input:focus-visible,button:focus-visible{outline:2px solid var(--kk);outline-offset:2px}
+button{font:600 15px inherit;font-family:inherit;border:0;border-radius:8px;padding:9px 16px;cursor:pointer;background:var(--text);color:var(--bg)}
+button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+#st{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:14px;color:var(--mute)}
+#st i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-inline-end:6px;background:var(--mute)}
+#st .connected i{background:var(--kk)} #st .connecting i{background:#f5b942} #st .offline i,#st .need_id i{background:var(--tt)}
+#feed{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:6px}
+#feed:empty::before{content:"اكتب يوزر تيك توك ويوزر كيك فوق، واضغط «ابدأ». الرسائل تطلع هنا مع بعض.";color:var(--mute);margin:auto;text-align:center}
+.msg{display:flex;gap:8px;align-items:baseline;padding:6px 10px;border-radius:8px;background:var(--panel);border-inline-start:4px solid var(--mute);word-break:break-word}
+.msg.tiktok{border-inline-start-color:var(--tt)} .msg.kick{border-inline-start-color:var(--kk)}
+.tag{font-size:12px;padding:0 7px;border-radius:99px;color:var(--bg);flex:none}
+.tiktok .tag{background:var(--tt);color:#fff} .kick .tag{background:var(--kk)}
+.msg b{flex:none;font-weight:600} .txt{min-width:0}
+.emote{height:1.6em;vertical-align:middle}
+body.overlay{background:transparent}
+body.overlay #bar{display:none}
+body.overlay #feed{overflow:hidden;justify-content:flex-end}
+body.overlay .msg{background:rgba(22,20,31,.72);font-size:20px}
+details{margin-top:8px;color:var(--mute);font-size:13px}
+@media (prefers-reduced-motion:no-preference){.msg{animation:in .18s ease-out}@keyframes in{from{opacity:0;transform:translateY(6px)}}}
+</style>
+</head>
+<body>
+<header id="bar">
+  <form id="f">
+    <label>يوزر تيك توك<input id="tt" placeholder="username" autocomplete="off"></label>
+    <label>يوزر كيك<input id="kk" placeholder="channel-name" autocomplete="off"></label>
+    <button>ابدأ</button>
+    <button type="button" class="ghost" id="obs">نسخ رابط OBS</button>
+  </form>
+  <details><summary>كيك ما اشتغل؟ أدخل رقم الغرفة يدويًا</summary>
+    <label>رقم غرفة كيك (chatroom id)<input id="kid" inputmode="numeric" placeholder="123456"></label>
+  </details>
+  <div id="st"></div>
+</header>
+<main id="feed" aria-live="polite"></main>
+<script>
+const $ = id => document.getElementById(id), q = new URLSearchParams(location.search);
+if (q.has('overlay')) document.body.classList.add('overlay');
+let saved = {}; try { saved = JSON.parse(localStorage.getItem('cfg') || '{}'); } catch {}
+let cfg = { tiktok: q.get('tiktok') ?? saved.tiktok ?? '', kick: q.get('kick') ?? saved.kick ?? '', kickId: q.get('kickId') ?? saved.kickId ?? '' };
+$('tt').value = cfg.tiktok; $('kk').value = cfg.kick; $('kid').value = cfg.kickId;
+
+const NAMES = { tiktok: 'تيك توك', kick: 'كيك' };
+const LABEL = { connecting: 'يتصل...', connected: 'متصل', offline: 'غير متصل، أعيد المحاولة', need_id: 'أدخل رقم الغرفة يدويًا' };
+const status = {};
+function paint() {
+  $('st').innerHTML = '';
+  for (const p of Object.keys(status)) {
+    const s = status[p], d = document.createElement('span');
+    d.className = s.state; d.innerHTML = '<i></i>';
+    d.append(NAMES[p] + ': ' + (LABEL[s.state] || s.state));
+    $('st').append(d);
+  }
+}
+
+const feed = $('feed');
+function add(m) {
+  const el = document.createElement('div'); el.className = 'msg ' + m.platform;
+  const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = NAMES[m.platform];
+  const u = document.createElement('b'); u.textContent = m.user; if (m.color) u.style.color = m.color;
+  const t = document.createElement('span'); t.className = 'txt'; t.dir = 'auto';
+  const re = /\[emote:(\d+):([^\]]*)\]/g; let last = 0, x;
+  while ((x = re.exec(m.text))) {
+    t.append(m.text.slice(last, x.index));
+    const img = new Image(); img.className = 'emote'; img.alt = x[2]; img.src = 'https://files.kick.com/emotes/' + x[1] + '/fullsize';
+    t.append(img); last = re.lastIndex;
+  }
+  t.append(m.text.slice(last));
+  el.append(tag, u, t);
+  const stick = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 90;
+  feed.append(el);
+  while (feed.children.length > 200) feed.firstChild.remove();
+  if (stick) feed.scrollTop = feed.scrollHeight;
+}
+
+let ws, timer;
+function open() {
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  ws.onopen = join;
+  ws.onmessage = e => { const m = JSON.parse(e.data); if (m.type === 'chat') add(m); else { status[m.platform] = m; paint(); } };
+  ws.onclose = () => { clearTimeout(timer); timer = setTimeout(open, 3000); };
+}
+function join() {
+  for (const k in status) delete status[k]; paint();
+  if ((cfg.tiktok || cfg.kick) && ws.readyState === 1) ws.send(JSON.stringify({ type: 'join', ...cfg }));
+}
+$('f').onsubmit = e => {
+  e.preventDefault();
+  cfg = { tiktok: $('tt').value.trim(), kick: $('kk').value.trim(), kickId: $('kid').value.trim() };
+  try { localStorage.setItem('cfg', JSON.stringify(cfg)); } catch {}
+  join();
+};
+$('obs').onclick = async () => {
+  const p = new URLSearchParams({ overlay: 1, tiktok: $('tt').value.trim(), kick: $('kk').value.trim() });
+  if ($('kid').value.trim()) p.set('kickId', $('kid').value.trim());
+  const url = location.origin + '/?' + p;
+  try { await navigator.clipboard.writeText(url); $('obs').textContent = 'انسخ ✓'; } catch { prompt('انسخ الرابط:', url); }
+  setTimeout(() => $('obs').textContent = 'نسخ رابط OBS', 2000);
+};
+open();
+</script>
+</body>
+</html>
